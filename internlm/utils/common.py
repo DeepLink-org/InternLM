@@ -57,7 +57,7 @@ def _move_tensor(element):
                     item = item.to(get_current_device()).detach()
     else:
         assert torch.is_tensor(element), f"element should be of type tensor, but got {type(element)}"
-        if not element.is_cuda:
+        if element.device==torch.device('cpu'):
             element = element.to(get_current_device()).detach()
     return element
 

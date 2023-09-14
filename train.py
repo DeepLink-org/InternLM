@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-
+import torch_dipu
+# import debugat
 import socket
 import time
 import traceback
@@ -44,6 +45,18 @@ from internlm.utils.writer import Writer
 
 # global llm logger
 logger = get_logger(__file__)
+
+#gqw
+def new_cuda_float_constructor(data):
+    return torch.tensor(data).cuda()
+# new_cuda_float_constructor = torch.cuda.FloatTensor
+
+torch.cuda.FloatTensor = new_cuda_float_constructor
+
+# torch.cuda.FloatTensor   tensor()    python继承tensor有问题 self.tensor() 
+# FloatTensor判断可能会有问题
+
+#gqw
 
 
 def initialize_llm_logger(start_time: str):
@@ -219,12 +232,13 @@ def main(args):
 
             # do forward and backward
             timer("fwd-bwd").start()
-
+            import pdb
+            # pdb.set_trace()
             _, _, loss = trainer.execute_schedule(
                 batch, forward_only=False, return_loss=True, return_output_label=False
             )
             timer("fwd-bwd").stop()
-
+            # pdb.set_trace()
             # update parameters, and returns (success_update, grad_norm)
             trainer_result = trainer.step()
             assert trainer_result is not None

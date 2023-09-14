@@ -1,6 +1,7 @@
 from typing import List
 
 import torch
+import torch.nn as nn
 from flash_attn.losses.cross_entropy import CrossEntropyLoss as FlashCrossEntropyLoss
 from torch_scatter import scatter
 
@@ -201,9 +202,10 @@ class LossWithTypeId:
             self.ds_loss = torch.zeros(self.total_type_count, dtype=torch.float, device=device)
             self.ds_token_num = torch.zeros(self.total_type_count, dtype=torch.float, device=device)
 
-        self.loss_fn = FlashCrossEntropyLoss(
-            reduction="none", inplace_backward=True, process_group=gpc.get_group(ParallelMode.TENSOR)
-        )
+        # self.loss_fn = FlashCrossEntropyLoss(
+        #     reduction="none", inplace_backward=True, process_group=gpc.get_group(ParallelMode.TENSOR)
+        # )
+        self.loss_fn = nn.CrossEntropyLoss(reduction="none")
 
     def update(self, logits, labels, type_ids=None):
         with torch.no_grad():

@@ -23,7 +23,7 @@ class FlashGPTLMLoss(nn.Module):
         else:
             label_smoothing = 0
         self.label_smoothing = label_smoothing
-
+        parallel_output=False
         if parallel_output:
             self.loss_fn = FlashCrossEntropyLoss(
                 reduction="mean",

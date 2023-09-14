@@ -145,8 +145,8 @@ class HybridZeroOptimizer(BaseOptimizer):
             hysteresis=hysteresis,
             max_scale=max_scale,
         )
-        self._found_overflow = torch.cuda.FloatTensor([0], device=get_current_device())
-
+        # self._found_overflow = torch.cuda.FloatTensor([0], device=get_current_device())
+        self._found_overflow = torch.cuda.FloatTensor([0])
         # gradient clipping
         self._clip_grad_norm = clip_grad_norm
 
@@ -560,7 +560,8 @@ class HybridZeroOptimizer(BaseOptimizer):
         timer("sync_grad").start()
         self._sync_grad()
         timer("sync_grad").stop()
-
+        import pdb
+        # pdb.set_trace()
         return self._step(closure=closure, norms=total_norms)
 
     def _step(self, closure=None, norms=None):
@@ -581,6 +582,8 @@ class HybridZeroOptimizer(BaseOptimizer):
             self.grad_scaler.update(found_inf)
         # update loss scale if overflow occurs
         if found_inf:
+            import pdb
+            # pdb.set_trace()
             if gpc.is_rank_for_log():
                 logger.warning("Overflow occurs, please check it.")
                 send_alert_message(
@@ -589,6 +592,7 @@ class HybridZeroOptimizer(BaseOptimizer):
                 )
             self._grad_store._averaged_gradients = dict()
             self.zero_grad()
+ 
             return False, norms
 
         # copy the grad of fp16 param to fp32 param

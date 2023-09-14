@@ -159,7 +159,7 @@ def fused_dense_func_torch(
         x.dtype == torch.float32 and torch.is_autocast_enabled()
     )
     if x.is_cuda and weight.is_cuda and (bias is None or bias.is_cuda) and dtype_eligible:
-        return FusedDenseFunc.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
+        return FusedDenseFuncTorch.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
     else:
         return FusedDenseFuncTorch.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
 

@@ -1,18 +1,24 @@
-JOB_NAME = "7b_train"
-DO_ALERT = False
+JOB_NAME = "fdy_7b_train"
 
-SEQ_LEN = 512
-HIDDEN_SIZE = 4096
-NUM_ATTENTION_HEAD = 32
+# raw model config
+# SEQ_LEN = 2048
+# HIDDEN_SIZE = 4096
+# NUM_ATTENTION_HEAD = 32
+
+# small model config
+SEQ_LEN = 256
+HIDDEN_SIZE = 512
+NUM_ATTENTION_HEAD = 16
+
 MLP_RATIO = 8 / 3
 NUM_LAYER = 32
 VOCAB_SIZE = 103168
 
-# MODEL_ONLY_FOLDER = "local:llm_ckpts/xxxx"
+MODEL_ONLY_FOLDER = "local:/home/yuyue.p/interlm_7b"
 # Ckpt folder format:
 # fs: 'local:/mnt/nfs/XXX'
-SAVE_CKPT_FOLDER = "/home/yuyue.p/interlm_7b/save"
-LOAD_CKPT_FOLDER = "/home/yuyue.p/interlm_7b"
+SAVE_CKPT_FOLDER = "local:/home/yuyue.p/interlm_7b/llm_ckpts"
+LOAD_CKPT_FOLDER = "local:/home/yuyue.p/interlm_7b/"
 
 # boto3 Ckpt folder format:
 # import os
@@ -21,18 +27,16 @@ LOAD_CKPT_FOLDER = "/home/yuyue.p/interlm_7b"
 # LOAD_CKPT_FOLDER = f"boto3:s3://model_weights.{BOTO3_IP}/internlm/snapshot/1/"
 CHECKPOINT_EVERY = 50
 ckpt = dict(
+    load_given_ckpt=True,
     enable_save_ckpt=False,  # enable ckpt save.
     save_ckpt_folder=SAVE_CKPT_FOLDER,  # Path to save training ckpt.
-    # load_ckpt_folder= dict(path=MODEL_ONLY_FOLDER, content=["model"], ckpt_type="normal"),
-    load_ckpt_folder="local:llm_ckpts/",
-    # 'load_ckpt_info' setting guide:
-    # 1. the 'path' indicate ckpt path,
-    # 2. the 'content‘ means what states will be loaded, support: "model", "sampler", "optimizer", "scheduler", "all"
-    # 3. the ’ckpt_type‘ means the type of checkpoint to be loaded, now only 'normal' type is supported.
-    load_ckpt_info=dict(path=LOAD_CKPT_FOLDER, content=("model",), ckpt_type="internlm"),
+    load_ckpt_folder=LOAD_CKPT_FOLDER, # Ckpt path to resume training(load weights and scheduler/context states).
+    # load_model_only_folder=MODEL_ONLY_FOLDER, # Path to initialize with given model weights.
+    load_optimizer=False,  # Wheter to load optimizer states when   continuing training.
     checkpoint_every=CHECKPOINT_EVERY,
     async_upload=True,  # async ckpt upload. (only work for boto3 ckpt)
     async_upload_tmp_folder="/dev/shm/internlm_tmp_ckpt/",  # path for temporarily files during asynchronous upload.
+    snapshot_ckpt_folder="/".join([SAVE_CKPT_FOLDER, "snapshot"]),  # directory for snapshot ckpt storage path.
     oss_snapshot_freq=int(CHECKPOINT_EVERY / 2),  # snapshot ckpt save frequency.
 )
 
@@ -41,11 +45,11 @@ VALID_FOLDER = "/home/yuyue.p/work/data/split/valid"
 data = dict(
     seq_len=SEQ_LEN,
     # micro_num means the number of micro_batch contained in one gradient update
-    micro_num=4,
+    micro_num=3,
     # packed_length = micro_bsz * SEQ_LEN
-    micro_bsz=2,
+    micro_bsz=1,
     # defaults to the value of micro_num
-    valid_micro_num=4,
+    valid_micro_num=1,
     # defaults to 0, means disable evaluate
     valid_every=50,
     pack_sample_into_one=False,
@@ -53,9 +57,9 @@ data = dict(
     skip_batches="",
     rampup_batch_size="",
     # Datasets with less than 50 rows will be discarded
-    min_length=50,
-    # train_folder=TRAIN_FOLDER,
-    # valid_folder=VALID_FOLDER,
+    min_length=1,
+    train_folder=TRAIN_FOLDER,
+    valid_folder=VALID_FOLDER,
 )
 
 grad_scaler = dict(
@@ -82,7 +86,7 @@ hybrid_zero_optimizer = dict(
     overlap_sync_grad=True,
     overlap_sync_param=True,
     # bucket size for nccl communication params
-    reduce_bucket_size=512 * 1024 * 1024,
+    reduce_bucket_size=256 * 1024 * 1024,
     # grad clipping
     clip_grad_norm=1.0,
 )
@@ -98,6 +102,7 @@ adam = dict(
     adam_beta2_c=0,
     adam_eps=1e-8,
     weight_decay=0.01,
+    foreach=False,
 )
 
 lr_scheduler = dict(
@@ -120,7 +125,7 @@ model = dict(
     embed_split_hidden=True,
     vocab_size=VOCAB_SIZE,
     embed_grad_scale=1,
-    parallel_output=True,
+    parallel_output=False,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYER,
     mlp_ratio=MLP_RATIO,
@@ -144,20 +149,11 @@ pipeline parallel (dict):
 tensor parallel: tensor parallel size, usually the number of GPUs per node.
 """
 parallel = dict(
-    zero1=1,
+    zero1=2,
     tensor=4,
-    pipeline=dict(size=2, interleaved_overlap=True),
+    pipeline=dict(size=1, interleaved_overlap=True),
     sequence_parallel=False,
 )
 
 cudnn_deterministic = False
 cudnn_benchmark = False
-
-monitor = dict(
-    # feishu alert configs
-    alert=dict(
-        enable_feishu_alert=DO_ALERT,
-        feishu_alert_address=None,  # feishu webhook to send alert message
-        light_monitor_address=None,  # light_monitor address to send heartbeat
-    ),
-)

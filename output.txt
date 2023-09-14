@@ -1,0 +1,248 @@
+diff --git a/configs/7B_sft.py b/configs/7B_sft.py
+index 027d216..c58b2de 100644
+--- a/configs/7B_sft.py
++++ b/configs/7B_sft.py
+@@ -1,18 +1,18 @@
+ JOB_NAME = "7b_train"
+ DO_ALERT = False
+ 
+-SEQ_LEN = 2048
++SEQ_LEN = 512
+ HIDDEN_SIZE = 4096
+ NUM_ATTENTION_HEAD = 32
+ MLP_RATIO = 8 / 3
+ NUM_LAYER = 32
+ VOCAB_SIZE = 103168
+ 
+-MODEL_ONLY_FOLDER = "local:llm_ckpts/xxxx"
++# MODEL_ONLY_FOLDER = "local:llm_ckpts/xxxx"
+ # Ckpt folder format:
+ # fs: 'local:/mnt/nfs/XXX'
+-SAVE_CKPT_FOLDER = "local:llm_ckpts"
+-LOAD_CKPT_FOLDER = "local:llm_ckpts/49"
++SAVE_CKPT_FOLDER = "/home/yuyue.p/interlm_7b/save"
++LOAD_CKPT_FOLDER = "/home/yuyue.p/interlm_7b"
+ 
+ # boto3 Ckpt folder format:
+ # import os
+@@ -29,15 +29,15 @@ ckpt = dict(
+     # 1. the 'path' indicate ckpt path,
+     # 2. the 'content‘ means what states will be loaded, support: "model", "sampler", "optimizer", "scheduler", "all"
+     # 3. the ’ckpt_type‘ means the type of checkpoint to be loaded, now only 'normal' type is supported.
+-    load_ckpt_info=dict(path=MODEL_ONLY_FOLDER, content=("model",), ckpt_type="internlm"),
++    load_ckpt_info=dict(path=LOAD_CKPT_FOLDER, content=("model",), ckpt_type="internlm"),
+     checkpoint_every=CHECKPOINT_EVERY,
+     async_upload=True,  # async ckpt upload. (only work for boto3 ckpt)
+     async_upload_tmp_folder="/dev/shm/internlm_tmp_ckpt/",  # path for temporarily files during asynchronous upload.
+     oss_snapshot_freq=int(CHECKPOINT_EVERY / 2),  # snapshot ckpt save frequency.
+ )
+ 
+-TRAIN_FOLDER = "/path/to/dataset"
+-VALID_FOLDER = "/path/to/dataset"
++TRAIN_FOLDER = "/home/yuyue.p/work/data/split/train"
++VALID_FOLDER = "/home/yuyue.p/work/data/split/valid"
+ data = dict(
+     seq_len=SEQ_LEN,
+     # micro_num means the number of micro_batch contained in one gradient update
+@@ -128,7 +128,7 @@ model = dict(
+     dtype="torch.float16",  # Support: "torch.float16", "torch.half", "torch.bfloat16", "torch.float32", "torch.tf32"
+     norm_type="rmsnorm",
+     layer_norm_epsilon=1e-5,
+-    use_flash_attn=True,
++    use_flash_attn=False,
+     num_chunks=1,  # if num_chunks > 1, interleaved pipeline scheduler is used.
+ )
+ """
+@@ -144,8 +144,9 @@ pipeline parallel (dict):
+ tensor parallel: tensor parallel size, usually the number of GPUs per node.
+ """
+ parallel = dict(
+-    zero1=8,
+-    pipeline=dict(size=1, interleaved_overlap=True),
++    zero1=1,
++    tensor=4,
++    pipeline=dict(size=2, interleaved_overlap=True),
+     sequence_parallel=False,
+ )
+ 
+diff --git a/internlm/model/loss.py b/internlm/model/loss.py
+index ac92b4b..9d13976 100644
+--- a/internlm/model/loss.py
++++ b/internlm/model/loss.py
+@@ -23,7 +23,7 @@ class FlashGPTLMLoss(nn.Module):
+         else:
+             label_smoothing = 0
+         self.label_smoothing = label_smoothing
+-
++        parallel_output=False
+         if parallel_output:
+             self.loss_fn = FlashCrossEntropyLoss(
+                 reduction="mean",
+diff --git a/internlm/model/metrics.py b/internlm/model/metrics.py
+index 24ce592..c08fe9c 100644
+--- a/internlm/model/metrics.py
++++ b/internlm/model/metrics.py
+@@ -1,6 +1,7 @@
+ from typing import List
+ 
+ import torch
++import torch.nn as nn
+ from flash_attn.losses.cross_entropy import CrossEntropyLoss as FlashCrossEntropyLoss
+ from torch_scatter import scatter
+ 
+@@ -201,9 +202,10 @@ class LossWithTypeId:
+             self.ds_loss = torch.zeros(self.total_type_count, dtype=torch.float, device=device)
+             self.ds_token_num = torch.zeros(self.total_type_count, dtype=torch.float, device=device)
+ 
+-        self.loss_fn = FlashCrossEntropyLoss(
+-            reduction="none", inplace_backward=True, process_group=gpc.get_group(ParallelMode.TENSOR)
+-        )
++        # self.loss_fn = FlashCrossEntropyLoss(
++        #     reduction="none", inplace_backward=True, process_group=gpc.get_group(ParallelMode.TENSOR)
++        # )
++        self.loss_fn = nn.CrossEntropyLoss(reduction="none")
+ 
+     def update(self, logits, labels, type_ids=None):
+         with torch.no_grad():
+diff --git a/internlm/model/utils.py b/internlm/model/utils.py
+index 12f80e3..4b1f7a1 100644
+--- a/internlm/model/utils.py
++++ b/internlm/model/utils.py
+@@ -159,7 +159,7 @@ def fused_dense_func_torch(
+         x.dtype == torch.float32 and torch.is_autocast_enabled()
+     )
+     if x.is_cuda and weight.is_cuda and (bias is None or bias.is_cuda) and dtype_eligible:
+-        return FusedDenseFunc.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
++        return FusedDenseFuncTorch.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
+     else:
+         return FusedDenseFuncTorch.apply(x, weight, bias, return_residual, process_group, sequence_parallel)
+ 
+diff --git a/internlm/solver/optimizer/hybrid_zero_optim.py b/internlm/solver/optimizer/hybrid_zero_optim.py
+index e0ed687..0464260 100644
+--- a/internlm/solver/optimizer/hybrid_zero_optim.py
++++ b/internlm/solver/optimizer/hybrid_zero_optim.py
+@@ -145,8 +145,8 @@ class HybridZeroOptimizer(BaseOptimizer):
+             hysteresis=hysteresis,
+             max_scale=max_scale,
+         )
+-        self._found_overflow = torch.cuda.FloatTensor([0], device=get_current_device())
+-
++        # self._found_overflow = torch.cuda.FloatTensor([0], device=get_current_device())
++        self._found_overflow = torch.cuda.FloatTensor([0])
+         # gradient clipping
+         self._clip_grad_norm = clip_grad_norm
+ 
+@@ -560,7 +560,8 @@ class HybridZeroOptimizer(BaseOptimizer):
+         timer("sync_grad").start()
+         self._sync_grad()
+         timer("sync_grad").stop()
+-
++        import pdb
++        # pdb.set_trace()
+         return self._step(closure=closure, norms=total_norms)
+ 
+     def _step(self, closure=None, norms=None):
+@@ -581,6 +582,8 @@ class HybridZeroOptimizer(BaseOptimizer):
+             self.grad_scaler.update(found_inf)
+         # update loss scale if overflow occurs
+         if found_inf:
++            import pdb
++            # pdb.set_trace()
+             if gpc.is_rank_for_log():
+                 logger.warning("Overflow occurs, please check it.")
+                 send_alert_message(
+@@ -589,6 +592,7 @@ class HybridZeroOptimizer(BaseOptimizer):
+                 )
+             self._grad_store._averaged_gradients = dict()
+             self.zero_grad()
++ 
+             return False, norms
+ 
+         # copy the grad of fp16 param to fp32 param
+diff --git a/internlm/utils/common.py b/internlm/utils/common.py
+index f3b58c0..50d4ac2 100644
+--- a/internlm/utils/common.py
++++ b/internlm/utils/common.py
+@@ -57,7 +57,7 @@ def _move_tensor(element):
+                     item = item.to(get_current_device()).detach()
+     else:
+         assert torch.is_tensor(element), f"element should be of type tensor, but got {type(element)}"
+-        if not element.is_cuda:
++        if element.device==torch.device('cpu'):
+             element = element.to(get_current_device()).detach()
+     return element
+ 
+diff --git a/requirements/runtime.txt b/requirements/runtime.txt
+index f46d7ad..a06f2e2 100644
+--- a/requirements/runtime.txt
++++ b/requirements/runtime.txt
+@@ -12,5 +12,4 @@ packaging
+ boto3
+ botocore
+ torch-scatter
+-pyecharts
+--f https://data.pyg.org/whl/torch-1.13.1+cu117.html
+\ No newline at end of file
++pyecharts
+\ No newline at end of file
+diff --git a/third_party/apex b/third_party/apex
+deleted file mode 160000
+index 0da3ffb..0000000
+--- a/third_party/apex
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 0da3ffb92ee6fbe5336602f0e3989db1cd16f880
+diff --git a/third_party/flash-attention b/third_party/flash-attention
+--- a/third_party/flash-attention
++++ b/third_party/flash-attention
+@@ -1 +1 @@
+-Subproject commit eff9fe6b8076df59d64d7a3f464696738a3c7c24
++Subproject commit eff9fe6b8076df59d64d7a3f464696738a3c7c24-dirty
+diff --git a/train.py b/train.py
+index b9fe6af..ba275d1 100644
+--- a/train.py
++++ b/train.py
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env python
+ # -*- encoding: utf-8 -*-
+-
++import torch_dipu
++# import debugat
+ import socket
+ import time
+ import traceback
+@@ -45,6 +46,18 @@ from internlm.utils.writer import Writer
+ # global llm logger
+ logger = get_logger(__file__)
+ 
++#gqw
++def new_cuda_float_constructor(data):
++    return torch.tensor(data).cuda()
++# new_cuda_float_constructor = torch.cuda.FloatTensor
++
++torch.cuda.FloatTensor = new_cuda_float_constructor
++
++# torch.cuda.FloatTensor   tensor()    python继承tensor有问题 self.tensor() 
++# FloatTensor判断可能会有问题
++
++#gqw
++
+ 
+ def initialize_llm_logger(start_time: str):
+     """
+@@ -219,12 +232,13 @@ def main(args):
+ 
+             # do forward and backward
+             timer("fwd-bwd").start()
+-
++            import pdb
++            # pdb.set_trace()
+             _, _, loss = trainer.execute_schedule(
+                 batch, forward_only=False, return_loss=True, return_output_label=False
+             )
+             timer("fwd-bwd").stop()
+-
++            # pdb.set_trace()
+             # update parameters, and returns (success_update, grad_norm)
+             trainer_result = trainer.step()
+             assert trainer_result is not None
