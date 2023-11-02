@@ -54,8 +54,8 @@ data = dict(
     rampup_batch_size="",
     # Datasets with less than 50 rows will be discarded
     min_length=50,
-    # train_folder=TRAIN_FOLDER,
-    # valid_folder=VALID_FOLDER,
+    train_folder=TRAIN_FOLDER,
+    valid_folder=VALID_FOLDER,
 )
 
 grad_scaler = dict(
@@ -120,7 +120,7 @@ model = dict(
     embed_split_hidden=True,
     vocab_size=VOCAB_SIZE,
     embed_grad_scale=1,
-    parallel_output=True,
+    parallel_output=False,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYER,
     mlp_ratio=MLP_RATIO,
