@@ -86,7 +86,7 @@ class MHA(nn.Module):
             **factory_kwargs,
         )  # according to https://spaces.ac.cn/archives/9577
 
-        import DipuExt_poc.ext_apply.internlm.ext_mha as ext_mha
+        import DeepLinkExt.ext_apply.internlm.ext_mha as ext_mha
         FlashSelfAttention = ext_mha.DeeplinkSelfAttention
         inner_attn_cls = FlashSelfAttention if use_flash_attn else FlashSelfAttention
         inner_cross_attn_cls = FlashCrossAttention if use_flash_attn else CrossAttention

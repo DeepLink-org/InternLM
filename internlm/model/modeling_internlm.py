@@ -30,7 +30,7 @@ MODEL_TYPE = "INTERNLM"
 
 logger = get_logger(__file__)
 RMSNorm = try_import_RMSNorm()
-from DipuExt_poc.ext_apply.internlm.RMSNorm import InternLMRMSNorm, DeeplinkRMSNorm, DeeplinkRMSNorm_WithNormalizedShape
+from DeepLinkExt.ext_apply.internlm.RMSNorm import InternLMRMSNorm, DeeplinkRMSNorm, DeeplinkRMSNorm_WithNormalizedShape
 RMSNorm = DeeplinkRMSNorm_WithNormalizedShape
 
 class PackedFlashBaseLayer1D(nn.Module):

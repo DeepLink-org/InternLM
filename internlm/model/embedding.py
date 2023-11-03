@@ -113,7 +113,7 @@ class ApplyRotaryEmbQKV_(torch.autograd.Function):
 apply_rotary_emb_qkv_ = ApplyRotaryEmbQKV_.apply
 legacy_apply_rotary_embed_qkv = LegacyApplyRotaryEmbQKV_.apply
 legacy_apply_rotary_embed = LegacyApplyRotaryEmb.apply
-from DipuExt_poc.ext_apply.internlm.ext_apply_rotary import TorchApplyRotaryEmbQKV_, DeepLinkApplyRotaryEmbQKV_
+from DeepLinkExt.ext_apply.internlm.ext_apply_rotary import TorchApplyRotaryEmbQKV_, DeepLinkApplyRotaryEmbQKV_
 apply_rotary_emb_qkv_ = DeepLinkApplyRotaryEmbQKV_.apply
 legacy_apply_rotary_embed_qkv = DeepLinkApplyRotaryEmbQKV_.apply
 
