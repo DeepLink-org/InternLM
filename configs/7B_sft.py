@@ -36,8 +36,8 @@ ckpt = dict(
     oss_snapshot_freq=int(CHECKPOINT_EVERY / 2),  # snapshot ckpt save frequency.
 )
 
-TRAIN_FOLDER = "/home/yuyue.p/work/data/split/train"
-VALID_FOLDER = "/home/yuyue.p/work/data/split/valid"
+TRAIN_FOLDER = "/mnt/cache/gongqiwei/work/data/split/train"
+VALID_FOLDER = "/mnt/cache/gongqiwei/work/data/split/valid"
 data = dict(
     seq_len=SEQ_LEN,
     # micro_num means the number of micro_batch contained in one gradient update
