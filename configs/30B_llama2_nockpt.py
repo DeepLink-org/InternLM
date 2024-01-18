@@ -1,20 +1,25 @@
-JOB_NAME = "7b_train"
+JOB_NAME = "30b_train"
+
 model_type = "LLAMA2"
 DO_ALERT = False
 
-SEQ_LEN = 512 # greater SEQ_LEN require more memory.
-HIDDEN_SIZE = 4096
-NUM_ATTENTION_HEAD = 32
-NUM_KV_ATTENTION_HEAD = 16
-MLP_RATIO = 8 / 3
-NUM_LAYER = 32
-VOCAB_SIZE = 103168
+# SEQ_LEN = 2048
+SEQ_LEN = 512
+HIDDEN_SIZE = 6656
+NUM_ATTENTION_HEAD = 52
+NUM_KV_ATTENTION_HEAD = 4
+MLP_RATIO = 35/13
+NUM_LAYER = 60
+VOCAB_SIZE = 32000
 
-MODEL_ONLY_FOLDER = "local:llm_ckpts/xxxx"
+
+# MODEL_ONLY_FOLDER = "local:/mnt/cachenew/wanglei9/llama/30B/"
+MODEL_ONLY_FOLDER = "local:/mnt/lustre/share_data/PAT/datasets/llama-30b/"
 # Ckpt folder format:
 # fs: 'local:/mnt/nfs/XXX'
 SAVE_CKPT_FOLDER = "local:llm_ckpts"
-LOAD_CKPT_FOLDER = "local:llm_ckpts/49"
+# LOAD_CKPT_FOLDER = "local:/mnt/cachenew/wanglei9/llama/30B/"
+LOAD_CKPT_FOLDER = "local:/mnt/lustre/share_data/PAT/datasets/llama-30b/"
 
 # boto3 Ckpt folder format:
 # import os
@@ -26,12 +31,12 @@ ckpt = dict(
     enable_save_ckpt=False,  # enable ckpt save.
     save_ckpt_folder=SAVE_CKPT_FOLDER,  # Path to save training ckpt.
     # load_ckpt_folder= dict(path=MODEL_ONLY_FOLDER, content=["model"], ckpt_type="normal"),
-    load_ckpt_folder="local:llm_ckpts/",
+    # load_ckpt_folder="local:llm_ckpts/",
     # 'load_ckpt_info' setting guide:
     # 1. the 'path' indicate ckpt path,
     # 2. the 'content‘ means what states will be loaded, support: "model", "sampler", "optimizer", "scheduler", "all"
     # 3. the ’ckpt_type‘ means the type of checkpoint to be loaded, support: "internlm", "llama", "hf_llama".
-    load_ckpt_info=dict(path=MODEL_ONLY_FOLDER, content=("model",), ckpt_type="internlm"),
+    load_ckpt_info=dict(path=MODEL_ONLY_FOLDER, content=("model",), ckpt_type="hf_llama"),
     # 'auto_resume' is designed to automatically load the latest checkpoint from 'save_ckpt_folder' when encountering
     # training interruptions/hangs caused by hardware failures, using a scheduling system (such as k8s/slurm)
     # with an automatic restart mechanism upon training reboot.
@@ -46,18 +51,25 @@ ckpt = dict(
     oss_snapshot_freq=int(CHECKPOINT_EVERY / 2),  # snapshot ckpt save frequency.
 )
 
-TRAIN_FOLDER = "/mnt/cache/gongqiwei/work/data/split/train"
-VALID_FOLDER = "/mnt/cache/gongqiwei/work/data/split/valid"
+TRAIN_FOLDER = "/mnt/lustre/share_data/PAT/datasets/dolly_tokenizer_llama/train"
+VALID_FOLDER = "/mnt/lustre/share_data/PAT/datasets/dolly_tokenizer_llama/valid"
+
+
+#TRAIN_FOLDER = "/mnt/lustre/share_data/wanglei/data/split/"  # "/path/to/dataset"
+#VALID_FOLDER = "/mnt/lustre/share_data/wanglei/data/split/"  # "/path/to/dataset"
 data = dict(
     seq_len=SEQ_LEN,
     # micro_num means the number of micro_batch contained in one gradient update
     micro_num=4,
+    #micro_num=1,
     # packed_length = micro_bsz * SEQ_LEN
     micro_bsz=2,
+    #micro_bsz=1,
     # defaults to the value of micro_num
     valid_micro_num=4,
+    #valid_micro_num=1,
     # defaults to 0, means disable evaluate
-    valid_every=0,
+    valid_every=50,
     pack_sample_into_one=False,
     total_steps=50000,
     skip_batches="",
@@ -71,7 +83,7 @@ data = dict(
     min_length=50,
     train_folder=TRAIN_FOLDER,
     valid_folder=VALID_FOLDER,
-    empty_cache_and_diag_interval=10,
+    empty_cache_and_diag_interval=200,
     diag_outlier_ratio=1.1,
 )
 
@@ -97,7 +109,7 @@ grad_scaler = dict(
 hybrid_zero_optimizer = dict(
     # Enable low_level_optimzer overlap_communication
     overlap_sync_grad=True,
-    overlap_sync_param=True,
+    overlap_sync_param=False,
     # bucket size for nccl communication params
     reduce_bucket_size=512 * 1024 * 1024,
     # grad clipping
@@ -137,33 +149,40 @@ model = dict(
     embed_split_hidden=True,
     vocab_size=VOCAB_SIZE,
     embed_grad_scale=1,
-    parallel_output=False, # True is not supported by DIPU.
+    #parallel_output=True,
+    parallel_output=False,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYER,
+    no_bias=True,
     mlp_ratio=MLP_RATIO,
     apply_post_layer_norm=False,
-    dtype="torch.float16",  # Support: "torch.float16", "torch.half", "torch.bfloat16", "torch.float32", "torch.tf32"
+    # dtype="torch.bfloat16",  # Support: "torch.float16", "torch.half", "torch.bfloat16", "torch.float32", "torch.tf32"
+    dtype="torch.float16",
     norm_type="rmsnorm",
     layer_norm_epsilon=1e-5,
     use_flash_attn=True,
     num_chunks=1,  # if num_chunks > 1, interleaved pipeline scheduler is used.
+    num_kv_attention_heads=NUM_KV_ATTENTION_HEAD,
+    adapt_hf=True,  # if use hf_llama ckpt, please set true
 )
-
-# zero1 parallel:
-#     1. if zero1 <= 0, The size of the zero process group is equal to the size of the dp process group,
-#         so parameters will be divided within the range of dp.
-#     2. if zero1 == 1, zero is not used, and all dp groups retain the full amount of model parameters.
-#     3. zero1 > 1 and zero1 <= dp world size, the world size of zero is a subset of dp world size.
-#         For smaller models, it is usually a better choice to split the parameters within nodes with a setting <= 8.
-# pipeline parallel (dict):
-#     1. size: int, the size of pipeline parallel.
-#     2. interleaved_overlap: bool, enable/disable communication overlap when using interleaved pipeline scheduler.
-# tensor parallel: tensor parallel size, usually the number of GPUs per node.
-
+"""
+zero1 parallel:
+    1. if zero1 <= 0, The size of the zero process group is equal to the size of the dp process group,
+        so parameters will be divided within the range of dp.
+    2. if zero1 == 1, zero is not used, and all dp groups retain the full amount of model parameters.
+    3. zero1 > 1 and zero1 <= dp world size, the world size of zero is a subset of dp world size.
+        For smaller models, it is usually a better choice to split the parameters within nodes with a setting <= 8.
+pipeline parallel (dict):
+    1. size: int, the size of pipeline parallel.
+    2. interleaved_overlap: bool, enable/disable communication overlap when using interleaved pipeline scheduler.
+tensor parallel: tensor parallel size, usually the number of GPUs per node.
+"""
 parallel = dict(
-    zero1=4,
-    tensor=2,
-    pipeline=dict(size=1, interleaved_overlap=False),
+    #zero1=dict(size=8, fsdp=False),
+    #tensor=8,
+    zero1=dict(size=4, fsdp=False),
+    tensor=4,
+    pipeline=dict(size=1, interleaved_overlap=True),
     sequence_parallel=False,
 )
 
@@ -176,9 +195,6 @@ monitor = dict(
         enable_feishu_alert=DO_ALERT,
         feishu_alert_address=None,  # feishu webhook to send alert message
         light_monitor_address=None,  # light_monitor address to send heartbeat
+        alert_file_path=f"llm_alter/{JOB_NAME}_alert.log",
     ),
 )
-
-# metric_dtype can be "fp32" or other string
-# only when set to "fp32" will use fp32 to calc in metrics
-# metric_dtype = "fp32"
