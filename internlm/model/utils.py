@@ -239,23 +239,15 @@ def try_import_RMSNorm():
     Try import MixFusedRMSNorm from apex, if failed, return our RMSNorm
 
     """
-
-    # Prefer RMSNorm from DeepLinkExt, as apex may be unavailable.
-    try:
-        from DeepLinkExt.ext_apply.internlm.RMSNorm import DeepLinkRMSNorm_WithNormalizedShape
-        return DeepLinkRMSNorm_WithNormalizedShape
-    except ModuleNotFoundError:
-        pass
-
     try:
         from apex.normalization.fused_layer_norm import MixedFusedRMSNorm as RMSNorm
+
         return RMSNorm
     except ModuleNotFoundError:
-        pass
+        logger.warning("The torch implementation for MixFusedRMSNorm is slower than apex. Please note this!")
+        from internlm.model.norm import RMSNormTorch as RMSNorm
 
-    logger.warning("The torch implementation for MixFusedRMSNorm is slower than apex. Please note this!")
-    from internlm.model.norm import RMSNormTorch as RMSNorm
-    return RMSNorm
+        return RMSNorm
 
 
 def is_moe_param(param: torch.Tensor) -> bool:
