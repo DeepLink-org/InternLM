@@ -379,21 +379,26 @@ def initialize_llm_profile(profiling: bool = False, start_time: str = None):
     if profiling and gpc.get_local_rank(ParallelMode.DATA) == 0 and gpc.get_local_rank(ParallelMode.TENSOR) == 0:
         llm_profile = torch.profiler.profile
         logger.info(f"Do profiling in rank {gpc.get_global_rank()}!")
+        return llm_profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            schedule=torch.profiler.schedule(
+                skip_first=5, wait=1, warmup=1, active=1, repeat=1
+            ),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                f"RUN/{gpc.config.JOB_NAME}/{start_time}/traces/rank{gpc.get_global_rank()}_"
+                + f"dp{gpc.get_local_rank(ParallelMode.DATA)}_"
+                + f"tp{gpc.get_local_rank(ParallelMode.TENSOR)}_"
+                + f"pp{gpc.get_local_rank(ParallelMode.PIPELINE)}",
+            ),
+            with_stack=True,
+            with_modules=True,
+        )
     else:
         llm_profile = DummyProfile
-
-    return llm_profile(
-        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(skip_first=5, wait=1, warmup=1, active=1, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(
-            f"RUN/{gpc.config.JOB_NAME}/{start_time}/traces/rank{gpc.get_global_rank()}_"
-            + f"dp{gpc.get_local_rank(ParallelMode.DATA)}_"
-            + f"tp{gpc.get_local_rank(ParallelMode.TENSOR)}_"
-            + f"pp{gpc.get_local_rank(ParallelMode.PIPELINE)}",
-        ),
-        with_stack=True,
-        with_modules=True,
-    )
+        return llm_profile()
 
 
 @llm_timeout(func_name="record_current_batch_training_metrics")
