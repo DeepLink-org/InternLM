@@ -195,7 +195,7 @@ def main(args):
     train_iter = iter(train_dl)
 
     if args.profiling:
-        native_prof = torch_dipu.profiler.NativeProfile("./profile_result", True)
+        native_prof = torch_dipu.profiler.NativeProfile("./profile_result", False) # 设置成True，会记录callstack，导致cpu占用过多，对性能分析影响大，导致结果失真
         index = 0
     with initialize_llm_profile(profiling=args.profiling, start_time=current_time) as prof:
         # start iterating the train data and begin training
