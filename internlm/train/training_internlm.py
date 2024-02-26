@@ -385,7 +385,7 @@ def initialize_llm_profile(profiling: bool = False, start_time: str = None):
                 torch.profiler.ProfilerActivity.CUDA,
             ],
             schedule=torch.profiler.schedule(
-                skip_first=5, wait=1, warmup=1, active=1, repeat=1
+                skip_first=100, wait=1, warmup=1, active=1, repeat=1
             ),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(
                 f"RUN/{gpc.config.JOB_NAME}/{start_time}/traces/rank{gpc.get_global_rank()}_"

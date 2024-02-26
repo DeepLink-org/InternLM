@@ -8,6 +8,7 @@ from functools import partial
 
 import torch
 import torch.distributed as dist
+import torch_npu
 
 import deeplink_ext.patch_internlm
 import internlm
@@ -193,7 +194,12 @@ def main(args):
     # transfer the train data loader into train data iterator
     train_iter = iter(train_dl)
 
+    if args.profiling:
+        config = torch.npu.profileConfig(TORCH_CALL_STACK=False)
+        e2eprof = torch.npu.profile("./e2e_profile_result",  use_e2e_profiler=True, config=config)
+    index = 0
     with initialize_llm_profile(profiling=args.profiling, start_time=current_time) as prof:
+        torch.cuda.synchronize()
         # start iterating the train data and begin training
         for batch_count in range(train_state.batch_count, total_steps):
             empty_cache_and_diag(batch_count, interval=gpc.config.data.empty_cache_and_diag_interval)
@@ -299,6 +305,13 @@ def main(args):
 
             if batch_count % 2 == 0:
                 prof.step()
+                index += 1
+                if index == 256 and args.profiling:
+                   print("start e2e profiler", flush=True)
+                   e2eprof.__enter__()
+                if index == 257 and args.profiling:
+                    print("end e2e profiler", flush=True)
+                    e2eprof.__exit__(None, None, None)
 
     ckpt_manager.wait_async_upload_finish()
 
