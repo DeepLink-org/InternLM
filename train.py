@@ -304,10 +304,10 @@ def main(args):
             if batch_count % 2 == 0:
                 prof.step()
                 index += 1
-                if index == 256 and args.profiling:
+                if index == 140 and args.profiling:
                     print("start native profiler", flush=True)
                     native_prof.__enter__()
-                if index == 257 and args.profiling:
+                if index == 141 and args.profiling:
                     print("end native profiler", flush=True)
                     native_prof.__exit__(None, None, None)
 
