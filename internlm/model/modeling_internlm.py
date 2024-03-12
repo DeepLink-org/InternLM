@@ -35,6 +35,8 @@ MODEL_TYPE = "INTERNLM"
 logger = get_logger(__file__)
 RMSNorm = try_import_RMSNorm()
 
+import os
+FORCE_FALLBACK = os.environ.get("DEEPLINK_EXT_FORCE_FALLBACK", "0") != "0"
 
 class PackedFlashBaseLayer1D(nn.Module):
     """
@@ -209,7 +211,10 @@ class PackedFlashBaseLayer1D(nn.Module):
         def _dropout_and_norm_attn(_hidden_states):
             _dropped = self.dropout1(_hidden_states)
             _residual = _dropped
-            _hidden_states = self.norm1(_residual.float())
+            if FORCE_FALLBACK:
+                _hidden_states = self.norm1(_residual.float())
+            else:
+                _hidden_states = self.norm1(_residual)
             return _residual, _hidden_states
 
         if self.dropout_selective_checkpoint:
@@ -225,7 +230,10 @@ class PackedFlashBaseLayer1D(nn.Module):
         def _dropout_and_norm_ffn(_residual, _hidden_states):
             _dropped = self.dropout2(_hidden_states)
             _residual = (_dropped + _residual) if _residual is not None else _dropped
-            _hidden_states = self.norm2(_residual.float())
+            if FORCE_FALLBACK:
+                _hidden_states = self.norm2(_residual.float())
+            else:
+                _hidden_states = self.norm2(_residual)
             return _residual, _hidden_states
 
         if self.dropout_selective_checkpoint:
@@ -413,7 +421,10 @@ class PackedFlashInternLm1D(nn.Module):
             )
 
         if hasattr(self, "norm"):
-            hidden_states = self.norm(hidden_states.float())
+            if FORCE_FALLBACK:
+                hidden_states = self.norm(hidden_states.float())
+            else:
+                hidden_states = self.norm(hidden_states)
         if hasattr(self, "head"):
             hidden_states = self.head(hidden_states)
 

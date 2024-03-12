@@ -16,6 +16,8 @@ from internlm.core.context import global_context as gpc
 
 from .utils import gather_forward_split_backward, split_forward_gather_backward
 
+import os
+FORCE_FALLBACK = os.environ.get("DEEPLINK_EXT_FORCE_FALLBACK", "0") != "0"
 
 class Embedding1D(nn.Module):
     """
@@ -167,6 +169,8 @@ class RotaryEmbedding(torch.nn.Module):
             # Don't do einsum, it converts fp32 to fp16
             # freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             freqs = torch.outer(t, self.inv_freq.to(device=t.device))
+            if not FORCE_FALLBACK:
+                freqs = freqs.repeat(1, 2)
             if self.scale is None:
                 self._cos_cached = torch.cos(freqs).to(x.dtype)
                 self._sin_cached = torch.sin(freqs).to(x.dtype)
