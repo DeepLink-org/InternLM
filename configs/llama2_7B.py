@@ -38,7 +38,7 @@ data = dict(
     min_length=50,
     # train_folder=TRAIN_FOLDER,    # 为空则生成随机数据测试
     # valid_folder=VALID_FOLDER,
-    empty_cache_and_diag_interval=10,
+    empty_cache_and_diag_interval=200,
     diag_outlier_ratio=1.1,
 )
 
@@ -106,17 +106,17 @@ model = dict(
     embed_split_hidden=True,
     vocab_size=VOCAB_SIZE,
     embed_grad_scale=1,
-    parallel_output=True,  # 最后的输出是否需要gather起来，如果不gather的话，每个tensor parallel获取的就是自己对应的结果。注意华为现在强制改为了false（但分支不全，可能存在精度问题）
+    parallel_output=True,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYER,
     no_bias=True,
     mlp_ratio=MLP_RATIO,
     apply_post_layer_norm=False,
-    # dtype="torch.bfloat16",       华为使用float16
+    # dtype="torch.bfloat16",
     dtype="torch.float16",
     norm_type="rmsnorm",
     layer_norm_epsilon=1e-5,
-    use_flash_attn=False,           # 华为目前为false
+    use_flash_attn=False,
     num_kv_attention_heads=NUM_KV_ATTENTION_HEAD,
     adapt_hf=True,
 )
@@ -150,5 +150,4 @@ parallel = dict(
     tensor=dict(size=1, mode="mtp"),
     pipeline=dict(size=1, interleaved_overlap=False),
     # pipeline=dict(size=1, interleaved_overlap=True),
-    # weight=dict(size=1, overlap=False, memory_pool=False), 新版本功能，目前没有用
 )
